@@ -68,6 +68,27 @@ nautilus -q && nautilus &
 > **Tip:** If emblems do not appear immediately, try logging out and back in
 > so the GTK icon cache is fully refreshed.
 
+### Debugging on Fedora / GNOME
+
+The extension is quiet by default. To enable verbose diagnostics:
+
+```bash
+GITSCM_DEBUG=1 nautilus -q
+GITSCM_DEBUG=1 nautilus
+```
+
+Then inspect logs:
+
+```bash
+journalctl --user -f | grep -Ei 'gitscm|nautilus'
+```
+
+This prints extension load information plus reasons why emblems or menu entries
+are skipped.
+
+> **Important:** `org.gnome.NautilusPreviewer` / `WebKit2` errors come from the
+> Nautilus Previewer (GNOME Sushi) component, not from this extension.
+
 ### What `install.sh` does
 
 1. Copies `nautilus-gitscm/nautilus_gitscm.py` →
