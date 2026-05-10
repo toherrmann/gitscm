@@ -20,15 +20,59 @@ Installation:
 import os
 import shlex
 import subprocess
+import sys
 import threading
+import logging
 from urllib.parse import unquote, urlparse
 
 from gi import require_version
 
-require_version("Nautilus", "3.0")
 require_version("GObject", "2.0")
 
+
+def _is_env_enabled(value):
+    if value is None:
+        return False
+    return str(value).lower() in {"1", "true", "yes", "on", "y"}
+
+
+_DEBUG_ENABLED = _is_env_enabled(os.environ.get("GITSCM_DEBUG", "0"))
+
+_logger = logging.getLogger("nautilus-gitscm")
+if not _logger.handlers:
+    _handler = logging.StreamHandler(stream=sys.stderr)
+    _handler.setFormatter(logging.Formatter("gitscm: %(message)s"))
+    _logger.addHandler(_handler)
+_logger.setLevel(logging.DEBUG if _DEBUG_ENABLED else logging.WARNING)
+
+
+def _debug(msg, *args):
+    if _DEBUG_ENABLED:
+        _logger.debug(msg, *args)
+
+
+_nautilus_version = None
+for _candidate in ("4.0", "3.0"):
+    try:
+        require_version("Nautilus", _candidate)
+        _nautilus_version = _candidate
+        break
+    except ValueError:
+        continue
+
+if _nautilus_version is None:
+    raise ImportError(
+        "Nautilus GI binding not found (tried versions 4.0 and 3.0). "
+        "Ensure nautilus-python is installed."
+    )
+
 from gi.repository import GObject, Nautilus  # noqa: E402
+
+_debug(
+    "Loaded Nautilus extension (Nautilus %s, GITSCM_DEBUG=%s)",
+    _nautilus_version,
+    int(_DEBUG_ENABLED),
+)
 
 # ---------------------------------------------------------------------------
 # Emblem identifiers
@@ -50,6 +94,7 @@ _cache_lock = threading.Lock()
 
 def _run_git(args, cwd, timeout=5):
     """Run *git args* in *cwd* and return (returncode, stdout_str)."""
+    _debug("Running git command in %s: git %s", cwd, " ".join(args))
     try:
         result = subprocess.run(
             ["git"] + args,
@@ -61,24 +106,58 @@ def _run_git(args, cwd, timeout=5):
             encoding="utf-8",
             errors="replace",
         )
+        if result.returncode != 0:
+            _debug(
+                "Git command failed (%s): %s",
+                result.returncode,
+                result.stderr.strip(),
+            )
         return result.returncode, result.stdout.strip()
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    except subprocess.TimeoutExpired:
+        _debug("Git command timed out in %s: git %s", cwd, " ".join(args))
+        return -1, ""
+    except (FileNotFoundError, OSError) as exc:
+        _logger.warning("Cannot execute git in %s: %s", cwd, exc)
         return -1, ""
 
 
 def _get_repo_root(path):
     """Return the repository root for *path*, or None if not in a Git repo."""
     dir_path = path if os.path.isdir(path) else os.path.dirname(path)
+    if not dir_path:
+        return None
+
     with _cache_lock:
         if dir_path in _repo_cache:
+            _debug("Repo root cache hit for %s", dir_path)
             return _repo_cache[dir_path]
 
     code, output = _run_git(["rev-parse", "--show-toplevel"], dir_path)
     root = output if code == 0 else None
+    _debug("Resolved repo root for %s -> %s", dir_path, root)
 
     with _cache_lock:
         _repo_cache[dir_path] = root
     return root
+
+
+def _get_local_path(file_info):
+    """Return a normalized local filesystem path for a Nautilus file object."""
+    if file_info.get_uri_scheme() != "file":
+        return None
+
+    location = file_info.get_location()
+    if location:
+        path = location.get_path()
+        if path:
+            return os.path.normpath(path)
+
+    uri = file_info.get_uri()
+    if not uri:
+        return None
+    parsed = urlparse(uri)
+    path = unquote(parsed.path)
+    return os.path.normpath(path) if path else None
 
 
 def _get_path_status(repo_root, path):
@@ -134,9 +213,13 @@ def _open_in_terminal(cmd):
     for args in candidates:
         try:
             subprocess.Popen(args, start_new_session=True)
+            _debug("Opened terminal command with: %s", args[0])
             return
         except FileNotFoundError:
             continue
+        except OSError as exc:
+            _logger.warning("Failed launching terminal %s: %s", args[0], exc)
+    _logger.warning("No supported terminal emulator found for Git action output.")
 
 
 # ---------------------------------------------------------------------------
@@ -148,29 +231,37 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
     Nautilus extension that adds Git status emblems and a Git context menu.
     """
 
+    def __init__(self):
+        super().__init__()
+        _debug("GitSCMExtension initialized")
+
     # ------------------------------------------------------------------ #
     # Nautilus.InfoProvider                                                #
     # ------------------------------------------------------------------ #
 
     def update_file_info(self, file):
         """Add a Git status emblem to *file* (called once per visible item)."""
-        if file.get_uri_scheme() != "file":
-            return
+        try:
+            path = _get_local_path(file)
+            if not path:
+                return
 
-        path = unquote(urlparse(file.get_uri()).path)
-        repo_root = _get_repo_root(path)
-        if repo_root is None:
-            return
+            repo_root = _get_repo_root(path)
+            if repo_root is None:
+                return
 
-        status = _get_path_status(repo_root, path)
-        emblem = {
-            "clean": EMBLEM_CLEAN,
-            "modified": EMBLEM_MODIFIED,
-            "untracked": EMBLEM_UNTRACKED,
-        }.get(status)
+            status = _get_path_status(repo_root, path)
+            emblem = {
+                "clean": EMBLEM_CLEAN,
+                "modified": EMBLEM_MODIFIED,
+                "untracked": EMBLEM_UNTRACKED,
+            }.get(status)
 
-        if emblem:
-            file.add_emblem(emblem)
+            if emblem:
+                _debug("Adding emblem %s to %s", emblem, path)
+                file.add_emblem(emblem)
+        except Exception:
+            _logger.exception("update_file_info failed")
 
     # ------------------------------------------------------------------ #
     # Nautilus.MenuProvider                                                #
@@ -178,31 +269,46 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
 
     def get_file_items(self, window, files):
         """Return context menu items for the selected *files*."""
-        return self._build_menu_items(files)
+        try:
+            return self._build_menu_items(files)
+        except Exception:
+            _logger.exception("get_file_items failed")
+            return []
 
     def get_background_items(self, window, file):
         """Return context menu items when right-clicking a directory background."""
-        return self._build_menu_items([file])
+        try:
+            return self._build_menu_items([file])
+        except Exception:
+            _logger.exception("get_background_items failed")
+            return []
 
     # ------------------------------------------------------------------ #
     # Internal: menu building                                              #
     # ------------------------------------------------------------------ #
 
     def _build_menu_items(self, files):
+        if not files:
+            return []
+
         paths = []
         repo_root = None
 
         for f in files:
-            if f.get_uri_scheme() != "file":
+            path = _get_local_path(f)
+            if not path:
                 continue
-            path = unquote(urlparse(f.get_uri()).path)
             root = _get_repo_root(path)
             if root:
                 if repo_root is None:
                     repo_root = root
+                if root != repo_root:
+                    _debug("Skipping path from different repository: %s", path)
+                    continue
                 paths.append(path)
 
         if not repo_root or not paths:
+            _debug("No menu items: repo_root=%s, paths=%d", repo_root, len(paths))
             return []
 
         items = []
@@ -255,7 +361,9 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
     def _has_remote(self, repo_root):
         """Return True when the repository has at least one configured remote."""
         code, output = _run_git(["remote"], repo_root)
-        return code == 0 and bool(output.strip())
+        has_remote = code == 0 and bool(output.strip())
+        _debug("Repository %s has remote: %s", repo_root, has_remote)
+        return has_remote
 
     def _has_committable_changes(self, repo_root, paths):
         """
@@ -266,7 +374,9 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
         code, output = _run_git(
             ["status", "--porcelain", "--"] + rel_paths, repo_root
         )
-        return code == 0 and bool(output.strip())
+        has_changes = code == 0 and bool(output.strip())
+        _debug("Repository %s has committable changes: %s", repo_root, has_changes)
+        return has_changes
 
     def _is_ahead_of_remote(self, repo_root):
         """Return True when the current branch has commits not yet pushed."""
@@ -276,7 +386,9 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
         if code != 0:
             return False
         try:
-            return int(output) > 0
+            ahead = int(output) > 0
+            _debug("Repository %s ahead of upstream: %s", repo_root, ahead)
+            return ahead
         except ValueError:
             return False
 
@@ -285,6 +397,7 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
     # ------------------------------------------------------------------ #
 
     def _action_pull(self, repo_root):
+        _debug("Action selected: pull in %s", repo_root)
         cmd = (
             f"cd {shlex.quote(repo_root)} && "
             "git pull; "
@@ -293,9 +406,9 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
         _open_in_terminal(cmd)
 
     def _action_commit(self, repo_root, paths):
-        rel = " ".join(
-            shlex.quote(os.path.relpath(p, repo_root)) for p in paths
-        )
+        rel_paths = [shlex.quote(os.path.relpath(p, repo_root)) for p in paths]
+        rel = " ".join(rel_paths)
+        _debug("Action selected: commit in %s for %d paths", repo_root, len(paths))
         cmd = (
             f"cd {shlex.quote(repo_root)} && "
             f"git add -- {rel} && "
@@ -305,6 +418,7 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
         _open_in_terminal(cmd)
 
     def _action_push(self, repo_root):
+        _debug("Action selected: push in %s", repo_root)
         cmd = (
             f"cd {shlex.quote(repo_root)} && "
             "git push; "

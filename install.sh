@@ -20,6 +20,14 @@ ICON_DIR="${HOME}/.local/share/icons/hicolor/scalable/emblems"
 
 echo "==> Installing nautilus-gitscm..."
 
+if ! command -v python3 &>/dev/null; then
+    echo "WARNING: python3 not found in PATH."
+fi
+
+if ! command -v git &>/dev/null; then
+    echo "WARNING: git not found in PATH."
+fi
+
 # 1. Extension
 mkdir -p "${EXTENSION_DIR}"
 cp "${SOURCE_DIR}/nautilus_gitscm.py" "${EXTENSION_DIR}/"
@@ -43,5 +51,12 @@ echo "==> Installation complete."
 echo ""
 echo "Restart Nautilus to activate the extension:"
 echo "    nautilus -q && nautilus &"
+echo ""
+echo "Debug logs (optional):"
+echo "    GITSCM_DEBUG=1 nautilus -q"
+echo "    GITSCM_DEBUG=1 nautilus"
+echo "    journalctl --user -f | grep -Ei 'gitscm|nautilus'"
+echo ""
+echo "Note: Nautilus Previewer / WebKit2 errors are external to this extension."
 echo ""
 echo "Tip: If emblems do not appear after restart, log out and back in."
