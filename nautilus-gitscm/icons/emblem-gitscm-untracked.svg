@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  emblem-gitscm-untracked.svg
+  Inside a Git repo but not tracked: grey circle with a white question mark.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Grey background circle -->
+  <circle cx="24" cy="24" r="22" fill="#757575"/>
+  <!-- White question mark -->
+  <text
+    x="24"
+    y="35"
+    text-anchor="middle"
+    fill="white"
+    font-size="30"
+    font-weight="bold"
+    font-family="DejaVu Sans,sans-serif">?</text>
+</svg>

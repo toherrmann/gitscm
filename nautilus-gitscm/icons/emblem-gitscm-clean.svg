@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  emblem-gitscm-clean.svg
+  Git-tracked and up-to-date: green circle with a white checkmark.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Green background circle -->
+  <circle cx="24" cy="24" r="22" fill="#4CAF50"/>
+  <!-- White checkmark -->
+  <polyline
+    points="11,25 20,34 37,15"
+    fill="none"
+    stroke="white"
+    stroke-width="5"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+</svg>
