@@ -30,13 +30,13 @@ from gi import require_version
 require_version("GObject", "2.0")
 
 
-def _is_truthy_env(value):
+def _is_env_enabled(value):
     if value is None:
         return False
     return str(value).lower() in {"1", "true", "yes", "on", "y"}
 
 
-_DEBUG_ENABLED = _is_truthy_env(os.environ.get("GITSCM_DEBUG", "0"))
+_DEBUG_ENABLED = _is_env_enabled(os.environ.get("GITSCM_DEBUG", "0"))
 
 _logger = logging.getLogger("nautilus-gitscm")
 if not _logger.handlers:
@@ -156,8 +156,6 @@ def _get_local_path(file_info):
     if not uri:
         return None
     parsed = urlparse(uri)
-    if parsed.scheme != "file":
-        return None
     path = unquote(parsed.path)
     return os.path.normpath(path) if path else None
 
