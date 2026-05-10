@@ -25,7 +25,9 @@ see the Git state of every item at a glance.
 | **Git Push** | Current branch is ahead of its upstream (unpushed commits exist) |
 | **Git Commit History** | Exactly one tracked file is selected |
 
-Each action opens a terminal window to show the command output.
+Pull / Update, Commit…, and Push open a terminal window to show command output.
+**Git Commit History** opens a dedicated GUI window (no terminal) with a scrollable,
+monospace view of the `git log` for the selected file.
 
 ---
 
@@ -182,7 +184,8 @@ The extension registers two Nautilus interfaces:
 * **`Nautilus.MenuProvider`** — called when the user right-clicks.  
   Checks repository state (`git remote`, `git status`, `git rev-list
   @{u}..HEAD`) to decide which menu entries to display, then opens a
-  terminal window to execute the chosen Git command.
+  terminal window to execute the chosen Git command (Pull / Update, Commit,
+  Push) or a dedicated GTK GUI window for **Git Commit History**.
 
 Git repository root lookups are cached in memory to avoid redundant
 subprocess calls while browsing large directories.
