@@ -10,7 +10,7 @@ Provides:
   - Context menu Git actions (right-click)
       Git Pull / Update  → pull from remote (shown when a remote is configured)
       Git Commit…        → stage + commit selected paths (shown when there are changes)
-      Git Commit History → show commit log for one selected tracked file
+      Git Commit History → show commit log in a GUI window for one selected tracked file
       Git Push           → push to remote (shown when local commits are ahead of upstream)
 
 Installation:
@@ -191,6 +191,46 @@ def _get_path_status(repo_root, path):
     if has_untracked:
         return "untracked"
     return None
+
+
+# ---------------------------------------------------------------------------
+# GUI helper – commit history window
+# ---------------------------------------------------------------------------
+
+def _show_commit_history_window(title, text):
+    """Open a standalone GTK window displaying *text* as scrollable commit history."""
+    try:
+        from gi.repository import Gtk
+    except ImportError:
+        _logger.warning("GTK not available; cannot show commit history window")
+        return
+
+    win = Gtk.Window()
+    win.set_title(title)
+    win.set_default_size(800, 600)
+
+    scrolled = Gtk.ScrolledWindow()
+    scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+
+    text_view = Gtk.TextView()
+    text_view.set_editable(False)
+    text_view.set_cursor_visible(False)
+    text_view.set_monospace(True)
+    text_view.get_buffer().set_text(text)
+
+    # Support GTK 3 (.add) and GTK 4 (.set_child)
+    if hasattr(scrolled, "set_child"):
+        scrolled.set_child(text_view)
+        win.set_child(scrolled)
+    else:
+        scrolled.add(text_view)
+        win.add(scrolled)
+
+    # Support GTK 3 (.show_all) and GTK 4 (.present)
+    if hasattr(win, "show_all"):
+        win.show_all()
+    else:
+        win.present()
 
 
 # ---------------------------------------------------------------------------
@@ -464,11 +504,18 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
         _open_in_terminal(cmd)
 
     def _action_commit_history(self, repo_root, path):
-        rel = shlex.quote(os.path.relpath(path, repo_root))
+        rel = os.path.relpath(path, repo_root)
         _debug("Action selected: commit history in %s for %s", repo_root, path)
-        cmd = (
-            f"cd {shlex.quote(repo_root)} && "
-            f"git --no-pager log --follow --decorate --date=short --stat -- {rel}; "
-            "echo; read -rp 'Press Enter to close\u2026'"
+        rc, output = _run_git(
+            ["log", "--follow", "--decorate", "--date=short", "--stat", "--", rel],
+            repo_root,
+            timeout=30,
         )
-        _open_in_terminal(cmd)
+        if rc != 0:
+            text = f"git log failed for:\n{path}\n\n(Exit code {rc})"
+        elif not output:
+            text = f"No commit history found for:\n{path}"
+        else:
+            text = output
+        title = f"Git Commit History \u2014 {os.path.basename(path)}"
+        _show_commit_history_window(title, text)
