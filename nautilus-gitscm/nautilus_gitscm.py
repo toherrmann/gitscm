@@ -31,9 +31,9 @@ require_version("GObject", "2.0")
 
 
 def _is_truthy_env(value):
-    if not value:
+    if value is None:
         return False
-    return value.lower() in {"1", "true", "yes", "on", "y"}
+    return str(value).lower() in {"1", "true", "yes", "on", "y"}
 
 
 _DEBUG_ENABLED = _is_truthy_env(os.environ.get("GITSCM_DEBUG", "0"))
@@ -408,9 +408,6 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
         _open_in_terminal(cmd)
 
     def _action_commit(self, repo_root, paths):
-        if not paths:
-            _logger.warning("Commit action skipped because no local paths were selected.")
-            return
         rel_paths = [shlex.quote(os.path.relpath(p, repo_root)) for p in paths]
         rel = " ".join(rel_paths)
         _debug("Action selected: commit in %s for %d paths", repo_root, len(paths))
