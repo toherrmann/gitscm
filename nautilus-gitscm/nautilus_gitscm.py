@@ -423,10 +423,10 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
             return None
 
         rel = os.path.relpath(path, repo_root)
-        code, output = _run_git(["ls-files", "--error-unmatch", "--", rel], repo_root)
+        code, _ = _run_git(["ls-files", "--error-unmatch", "--", rel], repo_root)
         if code == 0:
             return path
-        _debug("History menu hidden for untracked path %s: %s", path, output)
+        _debug("History menu hidden: %s is not tracked by git", path)
         return None
 
     # ------------------------------------------------------------------ #
