@@ -10,6 +10,7 @@ Provides:
   - Context menu Git actions (right-click)
       Git Pull / Update  → pull from remote (shown when a remote is configured)
       Git Commit…        → stage + commit selected paths (shown when there are changes)
+      Git Commit History → show commit log for one selected tracked file
       Git Push           → push to remote (shown when local commits are ahead of upstream)
 
 Installation:
@@ -352,6 +353,22 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
             )
             items.append(item)
 
+        # ---- Git Commit History -------------------------------------
+        history_path = self._get_history_path(repo_root, paths)
+        if history_path:
+            item = Nautilus.MenuItem(
+                name="GitSCM::CommitHistory",
+                label="Git Commit History",
+                tip="Show commit history for the selected tracked file",
+            )
+            item.connect(
+                "activate",
+                lambda _m, rr=repo_root, hp=history_path: self._action_commit_history(
+                    rr, hp
+                ),
+            )
+            items.append(item)
+
         return items
 
     # ------------------------------------------------------------------ #
@@ -392,6 +409,23 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
         except ValueError:
             return False
 
+    def _get_history_path(self, repo_root, paths):
+        """
+        Return the selected tracked file path for history view, or None.
+
+        History is intentionally scoped to exactly one selected local file.
+        """
+        if len(paths) != 1:
+            return None
+
+        path = paths[0]
+        if not os.path.isfile(path):
+            return None
+
+        rel = os.path.relpath(path, repo_root)
+        code, _ = _run_git(["ls-files", "--error-unmatch", "--", rel], repo_root)
+        return path if code == 0 else None
+
     # ------------------------------------------------------------------ #
     # Action handlers                                                       #
     # ------------------------------------------------------------------ #
@@ -422,6 +456,16 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
         cmd = (
             f"cd {shlex.quote(repo_root)} && "
             "git push; "
+            "echo; read -rp 'Press Enter to close\u2026'"
+        )
+        _open_in_terminal(cmd)
+
+    def _action_commit_history(self, repo_root, path):
+        rel = shlex.quote(os.path.relpath(path, repo_root))
+        _debug("Action selected: commit history in %s for %s", repo_root, path)
+        cmd = (
+            f"cd {shlex.quote(repo_root)} && "
+            f"git --no-pager log --follow --decorate --date=short --stat -- {rel}; "
             "echo; read -rp 'Press Enter to close\u2026'"
         )
         _open_in_terminal(cmd)

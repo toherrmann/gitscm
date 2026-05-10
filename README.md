@@ -23,6 +23,7 @@ see the Git state of every item at a glance.
 | **Git Pull / Update** | Repository has at least one configured remote |
 | **Git Commit…** | Selected files have staged, unstaged, or new changes |
 | **Git Push** | Current branch is ahead of its upstream (unpushed commits exist) |
+| **Git Commit History** | Exactly one tracked file is selected |
 
 Each action opens a terminal window to show the command output.
 
