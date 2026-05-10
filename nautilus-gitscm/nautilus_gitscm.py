@@ -31,6 +31,8 @@ require_version("GObject", "2.0")
 
 
 def _is_truthy_env(value):
+    if not value:
+        return False
     return value.lower() in {"1", "true", "yes", "on", "y"}
 
 
@@ -361,8 +363,9 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
     def _has_remote(self, repo_root):
         """Return True when the repository has at least one configured remote."""
         code, output = _run_git(["remote"], repo_root)
-        _debug("Repository %s has remote: %s", repo_root, code == 0 and bool(output.strip()))
-        return code == 0 and bool(output.strip())
+        has_remote = code == 0 and bool(output.strip())
+        _debug("Repository %s has remote: %s", repo_root, has_remote)
+        return has_remote
 
     def _has_committable_changes(self, repo_root, paths):
         """
@@ -373,8 +376,9 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
         code, output = _run_git(
             ["status", "--porcelain", "--"] + rel_paths, repo_root
         )
-        _debug("Repository %s has committable changes: %s", repo_root, code == 0 and bool(output.strip()))
-        return code == 0 and bool(output.strip())
+        has_changes = code == 0 and bool(output.strip())
+        _debug("Repository %s has committable changes: %s", repo_root, has_changes)
+        return has_changes
 
     def _is_ahead_of_remote(self, repo_root):
         """Return True when the current branch has commits not yet pushed."""
@@ -404,10 +408,10 @@ class GitSCMExtension(GObject.GObject, Nautilus.InfoProvider, Nautilus.MenuProvi
         _open_in_terminal(cmd)
 
     def _action_commit(self, repo_root, paths):
-        rel_paths = [shlex.quote(os.path.relpath(p, repo_root)) for p in paths]
-        if not rel_paths:
+        if not paths:
             _logger.warning("Commit action skipped because no local paths were selected.")
             return
+        rel_paths = [shlex.quote(os.path.relpath(p, repo_root)) for p in paths]
         rel = " ".join(rel_paths)
         _debug("Action selected: commit in %s for %d paths", repo_root, len(paths))
         cmd = (
