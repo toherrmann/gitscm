@@ -28,6 +28,13 @@ if ! command -v git &>/dev/null; then
     echo "WARNING: git not found in PATH."
 fi
 
+if command -v rpm &>/dev/null && ! rpm -q nautilus-python &>/dev/null; then
+    echo "WARNING: Fedora/RHEL package 'nautilus-python' is not installed."
+    echo "         Without it, Nautilus will not load this extension."
+    echo "         Install with: sudo dnf install nautilus-python"
+    echo ""
+fi
+
 # 1. Extension
 mkdir -p "${EXTENSION_DIR}"
 cp "${SOURCE_DIR}/nautilus_gitscm.py" "${EXTENSION_DIR}/"

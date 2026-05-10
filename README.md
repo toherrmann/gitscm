@@ -32,7 +32,7 @@ Each action opens a terminal window to show the command output.
 
 | Package | Purpose |
 |---------|---------|
-| `nautilus-python` (Ubuntu/Debian) or `python-nautilus` (Fedora) | Nautilus Python extension bindings |
+| `python3-nautilus` (Ubuntu/Debian) / `nautilus-python` (Fedora/RHEL) / `python-nautilus` (Arch) | Nautilus Python extension bindings |
 | `git` | Git CLI |
 | `gnome-terminal` / `xterm` / `konsole` / … | Terminal for action output |
 
@@ -49,9 +49,25 @@ sudo dnf install nautilus-python
 sudo pacman -S python-nautilus
 ```
 
+> **Required on Fedora:** install `nautilus-python` first.  
+> Without Nautilus Python bindings, this extension will **not load at all**
+> (no emblems, no Git context menu entries, no extension debug logs).
+
 ---
 
 ## Installation
+
+### Fedora / RHEL (recommended explicit flow)
+
+```bash
+sudo dnf install nautilus-python git
+git clone https://github.com/toherrmann/gitscm.git
+cd gitscm
+bash install.sh
+nautilus -q && nautilus &
+```
+
+### Generic
 
 ```bash
 git clone https://github.com/toherrmann/gitscm.git
@@ -83,11 +99,40 @@ Then inspect logs:
 journalctl --user -f | grep -Ei 'gitscm|nautilus'
 ```
 
-This prints extension load information plus reasons why emblems or menu entries
-are skipped.
+If the extension is loaded, you should see `gitscm:` log lines showing extension
+load information and reasons why emblems or menu entries are skipped.
 
 > **Important:** `org.gnome.NautilusPreviewer` / `WebKit2` errors come from the
 > Nautilus Previewer (GNOME Sushi) component, not from this extension.
+
+### Troubleshooting: extension appears not to load
+
+Symptoms:
+
+- no emblems shown
+- no Git context menu entries shown
+- no `gitscm:` debug logs visible
+
+First check (especially on Fedora):
+
+```bash
+rpm -q nautilus-python
+```
+
+If it is missing, install it and restart Nautilus:
+
+```bash
+sudo dnf install nautilus-python
+nautilus -q && nautilus &
+```
+
+Then retry with debug enabled:
+
+```bash
+GITSCM_DEBUG=1 nautilus -q
+GITSCM_DEBUG=1 nautilus
+journalctl --user -f | grep -Ei 'gitscm|nautilus'
+```
 
 ### What `install.sh` does
 
